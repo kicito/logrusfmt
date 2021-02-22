@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"github.com/labstack/echo/v4"
 	"github.com/sirupsen/logrus"
+	"net/http"
 	"time"
 )
 
@@ -68,6 +69,7 @@ func AddRequestCtxMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 func LoggingMiddleware(logger *logrus.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
+			req := c.Request()
 			now := time.Now()
 			if err := next(c); err != nil {
 				return err
@@ -77,7 +79,8 @@ func LoggingMiddleware(logger *logrus.Logger) echo.MiddlewareFunc {
 			respCtx := c.Request().Context()
 			respCtx = context.WithValue(respCtx, CtxKeyStatus, status)
 			respCtx = context.WithValue(respCtx, CtxKeyLatency, time.Since(now).Nanoseconds())
-			defer logger.WithContext(respCtx).Info("request log")
+			defer logger.WithContext(respCtx).
+				Infof("request log: %v(%s) %s %s", status, http.StatusText(status), req.Method, req.RequestURI)
 			return nil
 		}
 	}

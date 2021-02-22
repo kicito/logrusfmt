@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"runtime"
+	"strings"
 	"time"
 )
 
@@ -56,13 +57,7 @@ func (f *jsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	if !f.formatter.DisableTimestamp {
 		data["timestamp"] = entry.Time.Format(timestampFormat)
 	}
-	data["severity"] = func(level logrus.Level) string {
-		switch level {
-		case logrus.WarnLevel:
-			return "warn"
-		}
-		return entry.Level.String()
-	}(entry.Level)
+	data["severity"] = strings.ToUpper(entry.Level.String())
 	if entry.HasCaller() {
 		funcVal := entry.Caller.Function
 		if f.formatter.CallerPrettyfier != nil {
