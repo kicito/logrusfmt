@@ -4,6 +4,7 @@ import (
 	"context"
 	"github.com/annopkomol/logrusfmt"
 	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
 	"net/http"
 )
@@ -30,8 +31,10 @@ func main() {
 	//add middleware
 	e.Use(logrusfmt.AddRequestCtxMiddleware)
 	e.Use(logrusfmt.LoggingMiddleware(log))
+	//recover must be place after logging
+	e.Use(middleware.Recover())
 
-	e.GET("/", func(c echo.Context) error {
+	e.GET("/test", func(c echo.Context) error {
 		var ctx context.Context = c.Request().Context()
 		//
 		//
@@ -39,6 +42,7 @@ func main() {
 		//
 		//
 		//log error
+		//panic("hoho")
 		log.WithContext(ctx).
 			WithFields(logrus.Fields{
 				"from":   "account A",

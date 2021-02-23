@@ -24,7 +24,7 @@ func logTest(log *logrus.Logger) {
 	log.WithField("hello", "world").WithField("foo", "bar").Trace("trace")
 	log.Debug("debug")
 	log.Info("info")
-	log.Warn("warning")
+	log.WithField("hello", "world").Warn("warning")
 	log.Error("error")
 	log.Fatal("fatal")
 }

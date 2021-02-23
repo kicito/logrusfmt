@@ -26,7 +26,7 @@ func AddRequestCtxMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 			ctx    = req.Context()
 
 			ip             = c.RealIP()
-			userID         = header.Get("Authorization")
+			userID         = header.Get("Finno-User-ID")
 			uniqueCookieID string
 			method         = req.Method
 			uri            = req.RequestURI
@@ -69,19 +69,18 @@ func AddRequestCtxMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 func LoggingMiddleware(logger *logrus.Logger) echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			req := c.Request()
-			now := time.Now()
-			if err := next(c); err != nil {
-				return err
-			}
-			res := c.Response()
-			status := res.Status
-			respCtx := c.Request().Context()
-			respCtx = context.WithValue(respCtx, CtxKeyStatus, status)
+			var (
+				err        = next(c)
+				req        = c.Request()
+				now        = time.Now()
+				httpStatus = c.Response().Status
+				respCtx    = req.Context()
+			)
+			respCtx = context.WithValue(respCtx, CtxKeyStatus, httpStatus)
 			respCtx = context.WithValue(respCtx, CtxKeyLatency, time.Since(now).Nanoseconds())
-			defer logger.WithContext(respCtx).
-				Infof("request log: %v(%s) %s %s", status, http.StatusText(status), req.Method, req.RequestURI)
-			return nil
+			logger.WithContext(respCtx).
+				Infof("request log: %v(%s) %s %s", httpStatus, http.StatusText(httpStatus), req.Method, req.RequestURI)
+			return err
 		}
 	}
 }
