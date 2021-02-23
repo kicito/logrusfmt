@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/sirupsen/logrus"
 	"runtime"
-	"strings"
 	"time"
 )
 
@@ -26,8 +25,6 @@ func (f *jsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	for k, v := range entry.Data {
 		switch v := v.(type) {
 		case error:
-			// Otherwise errors are ignored by `encoding/json`
-			// https://github.com/sirupsen/logrus/issues/137
 			data[k] = v.Error()
 		default:
 			data[k] = v
@@ -35,14 +32,10 @@ func (f *jsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	}
 
 	if f.formatter.DataKey != "" {
-		newData := make(logrus.Fields, 4)
-		if len(data) > 0 {
-			data["message"] = entry.Message
-			newData[f.formatter.DataKey] = data
-			data = newData
-		} else {
-			data["message"] = entry.Message
-		}
+		temp := make(logrus.Fields, 4)
+		data["message"] = entry.Message
+		temp[f.formatter.DataKey] = data
+		data = temp
 	}
 
 	if entry.Context != nil {
@@ -57,7 +50,7 @@ func (f *jsonFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	if !f.formatter.DisableTimestamp {
 		data["timestamp"] = entry.Time.Format(timestampFormat)
 	}
-	data["severity"] = strings.ToUpper(entry.Level.String())
+	data["severity"] = entry.Level.String()
 	if entry.HasCaller() {
 		funcVal := entry.Caller.Function
 		if f.formatter.CallerPrettyfier != nil {
