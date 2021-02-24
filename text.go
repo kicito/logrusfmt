@@ -33,15 +33,15 @@ func (t *textFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		levelColor = blue
 	}
 	levelText := strings.ToUpper(entry.Level.String())
+	if levelText == "WARNING" {
+		levelText = "WARN"
+	}
 
 	//if entry.HasCaller() {
 
 	contextData := make(map[string]interface{})
-	if entry.Context != nil {
-		setRequestContext(entry.Context, contextData)
-	}
 
-	fmt.Fprintf(b, "[%s] [%s] %s %-44s", colorText(gray, entry.Time.Format("2006-01-02 15:04:05 MST")), colorText(levelColor, levelText), colorText(gray, "-"), entry.Message)
+	fmt.Fprintf(b, "[%s] %-16s %s %-44s", colorText(gray, entry.Time.Format("15:04:05 MST")), fmt.Sprintf("[%s]",colorText(levelColor,levelText)), colorText(gray, "-"), entry.Message)
 	if len(entry.Data) > 0 {
 		for k, v := range entry.Data {
 			fmt.Fprintf(b, "%s %v ", colorText(blue, k+":"), v)
@@ -54,6 +54,9 @@ func (t *textFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 		b.WriteByte('\t')
 		c := entry.Caller
 		fmt.Fprintf(b, "in %s at %s", colorText(blue, c.Function+"()"), colorText(green, fmt.Sprintf("%s:%d", c.File, c.Line)))
+		if entry.Context != nil {
+			setRequestContext(entry.Context, contextData)
+		}
 	}
 	if len(contextData) > 0 {
 		b.WriteByte('\n')
