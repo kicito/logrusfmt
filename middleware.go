@@ -4,10 +4,22 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"github.com/labstack/echo/v4"
-	"github.com/sirupsen/logrus"
+	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"time"
+
+	"github.com/sirupsen/logrus"
+)
+
+const (
+	HeaderXForwardedFor = "X-Forwarded-For"
+	HeaderXRealIP       = "X-Real-IP"
+	HeaderXFinnoUserID  = "Finno-User-ID"
+	HeaderXRequestID    = "X-Request-ID"
 )
 
 func randomHex(n int) (string, error) {
@@ -18,21 +30,39 @@ func randomHex(n int) (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func AddRequestCtxMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
-	return func(c echo.Context) error {
-		var (
-			req    = c.Request()
-			header = req.Header
-			ctx    = req.Context()
+func realIPFromHeader(h http.Header) string {
+	// Fall back to legacy behavior
+	if ip := h.Get(HeaderXForwardedFor); ip != "" {
+		return strings.Split(ip, ", ")[0]
+	}
+	if ip := h.Get(HeaderXRealIP); ip != "" {
+		return ip
+	}
+	return ""
+}
 
-			ip             = c.RealIP()
-			userID         = header.Get("Finno-User-ID")
+func RequestHTTPMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var (
+			ip             string
+			userID         string
 			uniqueCookieID string
-			method         = req.Method
-			uri            = req.RequestURI
-			userAgent      = req.UserAgent()
-			requestID      = header.Get("X-Request-ID")
+			method         string
+			uri            string
+			userAgent      string
+			requestID      string
+			ctx            context.Context = r.Context()
 		)
+
+		if ip = realIPFromHeader(r.Header); ip == "" {
+			ip, _, _ = net.SplitHostPort(r.RemoteAddr)
+		}
+		userID = r.Header.Get(HeaderXFinnoUserID)
+		// uniqueCookieID
+		method = r.Method
+		uri = r.RequestURI
+		userAgent = r.UserAgent()
+		requestID = r.Header.Get(HeaderXRequestID)
 
 		if ip != "" {
 			ctx = context.WithValue(ctx, CtxKeyIP, ip)
@@ -57,30 +87,31 @@ func AddRequestCtxMiddleware(next echo.HandlerFunc) echo.HandlerFunc {
 		}
 		ctx = context.WithValue(ctx, CtxKeyRequestID, requestID)
 
-		c.SetRequest(req.WithContext(ctx))
-		if err := next(c); err != nil {
-			return err
-		}
-
-		return nil
-	}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
-func LoggingMiddleware(logger *logrus.Logger) echo.MiddlewareFunc {
-	return func(next echo.HandlerFunc) echo.HandlerFunc {
-		return func(c echo.Context) error {
-			var (
-				err        = next(c)
-				req        = c.Request()
-				now        = time.Now()
-				httpStatus = c.Response().Status
-				respCtx    = req.Context()
-			)
-			respCtx = context.WithValue(respCtx, CtxKeyStatus, httpStatus)
+func LoggingHTTPMiddleware(logger *logrus.Logger) func(next http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// use NewRecorder to record the response
+			rec := httptest.NewRecorder()
+			now := time.Now()
+			next.ServeHTTP(rec, r)
+			for k, v := range rec.Header() {
+				w.Header()[k] = v
+			}
+			res := rec.Result()
+			// write respose to actual response writer
+			w.WriteHeader(res.StatusCode)
+			_, _ = io.Copy(w, res.Body)
+			respCtx := context.WithValue(r.Context(), CtxKeyStatus, res.StatusCode)
 			respCtx = context.WithValue(respCtx, CtxKeyLatency, time.Since(now).Nanoseconds())
-			logger.WithContext(respCtx).
-				Infof("request log: %v(%s) %s %s", httpStatus, http.StatusText(httpStatus), req.Method, req.RequestURI)
-			return err
-		}
+			msg := fmt.Sprintf("request log: %v %s %s", res.Status, r.Method, r.RequestURI)
+			go func(ctx context.Context, message string) {
+				logger.WithContext(respCtx).
+					Info(msg)
+			}(respCtx, msg)
+		})
 	}
 }

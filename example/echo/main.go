@@ -2,11 +2,12 @@ package main
 
 import (
 	"context"
+	"net/http"
+
 	"github.com/annopkomol/logrusfmt"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"github.com/sirupsen/logrus"
-	"net/http"
 )
 
 func main() {
@@ -15,6 +16,11 @@ func main() {
 		e   = echo.New()
 		log = logrus.New()
 	)
+
+	echo.NotFoundHandler = func(c echo.Context) error {
+		// render your 404 page
+		return c.String(http.StatusNotFound, "not found page")
+	}
 	//enable stack tracing
 	log.SetReportCaller(true)
 
@@ -29,8 +35,8 @@ func main() {
 	}
 
 	//add middleware
-	e.Use(logrusfmt.AddRequestCtxMiddleware)
-	e.Use(logrusfmt.LoggingMiddleware(log))
+	e.Use(echo.WrapMiddleware(logrusfmt.RequestHTTPMiddleware))
+	e.Use(echo.WrapMiddleware(logrusfmt.LoggingHTTPMiddleware(log)))
 	//recover must be place after logging
 	e.Use(middleware.Recover())
 
